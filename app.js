@@ -5,9 +5,6 @@ const Joi = require('joi');
 const crypto = require('crypto');
 require('dotenv').config(); // для env
 
-
-const serverLaravel = 'http://localhost:80';
-
 const secret = process.env.WEBSOCKET_JWT_SECRET;
 console.log('старт')
 
@@ -106,7 +103,7 @@ function onConnect(ws,req) { //ws - соединение, req параметры
 
         //проверяем есть ли у юзера уже открытый веб сокет (проверка идет по токену и по имени)
         if (objectUser.usersData[user.id]){
-            console.log('дубль найден по новому');
+            console.log('дубль');
             ws.close();
         }
 
@@ -228,7 +225,6 @@ function onConnect(ws,req) { //ws - соединение, req параметры
             }
 
             //удаляем юзера из объекта юзеров
-
             console.log('вышел ' + ws.user_uuid)
             delete objectUser.usersData[ws.user_uuid];
 
@@ -298,19 +294,6 @@ setInterval(() => {
 }, "2000");
 
 
-/*
-setInterval(() => {
-    console.log('333');
-    wss.clients.forEach((client) => {
-        if (client.readyState === WebSocket.OPEN) {
-            console.log('сокет открыт '+client.user_uuid);
-            console.log(client.readyState);
-        }
-    });
-},"5000");
-
- */
-
 // Отправка всем подключенным к сокету юзерам
 function dataAllSend(dataRequest){
 
@@ -347,7 +330,6 @@ function httpRequest(req, res) {
         req.on('end', function () {
             try {
                 let dataRequest = JSON.parse(jsonString);
-                console.log(dataRequest)
 
                 // Валидация
                 let { error, value } = chatSchema.validate(dataRequest);
@@ -361,7 +343,6 @@ function httpRequest(req, res) {
                     return;
                 }
 
-                console.log('отправка данных')
                 if( dataRequest.type==='publicMessage' ){
                     dataAllSend(dataRequest)
                 }
