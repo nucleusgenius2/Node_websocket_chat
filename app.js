@@ -3,11 +3,12 @@ const http = require('http');
 const ws = require('ws');
 const Joi = require('joi');
 const crypto = require('crypto');
+require('dotenv').config(); // для env
 
-//const port = 3000;
+
 const serverLaravel = 'http://localhost:80';
 
-const secret = 'HiPbwrFNoQt2W5Di1BmZfaZ2EWGzV9fwctwY1M80HamnYCCkuVAG4xPR5lcSJgwS'
+const secret = process.env.WEBSOCKET_JWT_SECRET;
 console.log('старт')
 
 let objectUser = {
@@ -32,7 +33,6 @@ const chatSchema = Joi.object({
 //const wss = new ws.Server({noServer: true});
 const wss = new ws.Server({port: 9999, maxPayload: 1024 * 1024}); //лимит на передачу ( 162 килобайта проходят а 512 уже нет, гдето между ними)
 wss.on('connection',onConnect);
-
 
 
 function base64UrlDecode(str) {
