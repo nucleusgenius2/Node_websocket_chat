@@ -316,7 +316,7 @@ function dataPersonalSend(dataRequest){
     });
 }
 
-
+//опциональное получение данных из внешних источников, в данном примере http, но по хорошему должен быть rebbit
 function httpRequest(req, res) {
 
     if (req.method === 'POST') {
