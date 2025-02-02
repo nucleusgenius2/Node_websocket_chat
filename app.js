@@ -1,4 +1,4 @@
-const axios = require('axios');
+const axios= require('axios');
 const http = require('http');
 const ws = require('ws');
 const Joi = require('joi');
@@ -29,9 +29,16 @@ const chatSchema = Joi.object({
     }).required()
 });
 
+const chatPublicMessageSchema = Joi.object({
+    type: Joi.string().min(3).required(),
+    data: Joi.string().required(),
+    user_id: Joi.number().integer().min(1),
+});
 
-//const wss = new ws.Server({noServer: true});
-const wss = new ws.Server({port: 9999, maxPayload: 1024 * 1024}); //лимит на передачу ( 162 килобайта проходят а 512 уже нет, гдето между ними)
+const tokenSchema = Joi.string().min(10).required();
+
+
+const wss = new ws.Server({port: 9999, maxPayload: 1024 * 1024}); //лимит на передачу данных (162 килобайта проходят, а 512 уже нет)
 wss.on('connection',onConnect);
 
 
@@ -64,7 +71,7 @@ function verifyToken(token) {
         .replace(/\+/g, '-')
         .replace(/\//g, '_');
 
-    console.log("Ожидаемая подпись:", signatureExpected);
+    //console.log("Ожидаемая подпись:", signatureExpected);
 
     // Проверка подписи
     if (signatureProvided !== signatureExpected) {
@@ -77,56 +84,34 @@ function verifyToken(token) {
     // Проверяем срок действия токена
     const currentTime = Math.floor(Date.now() / 1000);
     if (payload.exp < currentTime) {
-        return { valid: false, error: 'Token has expired' };
+        return { valid: false, error: 'Срок действия токена истек' };
     }
 
     return { valid: true, payload };
 }
 
 function onConnect(ws,req) { //ws - соединение, req параметры из url запроса
-    let errorUser = '';
-    //вся валидация теперь тут
     let url = new URLSearchParams(req.url);
     let userToken = url.get('token');
 
-
-    //получить количество активных веб сокетов
-    let number = 0;
+    let { error, value } = tokenSchema.validate(userToken);
+    if (error) {
+        console.log("Ошибка валидации:", error.details[0].message);
+        ws.close();
+    }
 
     let checkToken = verifyToken(userToken)
     if (checkToken.valid){
         let user = checkToken.payload
-        //проверяем есть ли у юзера уже открытый веб сокет (проверка идет по токену и по имени)
-        console.log(wss.clients);
 
+        //проверяем есть ли у юзера уже открытый веб сокет (проверка идет по токену и по имени)
         if (objectUser.usersData[user.id]){
             console.log('дубль найден по новому');
             ws.close();
         }
 
-        /*
-        wss.clients.forEach(function (client)
-        {
-            if (client.readyState === ws.OPEN) {
-                //закрытие только прошлого веб сокета, а не текущего
-                console.log('11 ' + client.user_uuid)
-                console.log('11 ' + user.id)
-                if (client.user_uuid && user.id === client.user_uuid) {
-                    console.log(client.user_uuid)
-                        // console.log('1 ' +client.user_name );
-                        //console.log('2 ' + success.data.json.name  );
-                        // console.log('3 ' + userToken  );
-                    console.log('дубликат соединения');
-                    ws.close();
-                    client.close();
-                }
-            }
-        });
-
-         */
-
         let idNewUser = user.id;
-        console.log('новейший юзер' + idNewUser)
+        console.log('новый юзер' + idNewUser)
         newUser[idNewUser] = user;
 
         //записали в объект соединения токен и имя юзера как идентификатор (будет доступен при переборе соединений)
@@ -134,7 +119,7 @@ function onConnect(ws,req) { //ws - соединение, req параметры
 
         //сохраняем данные юзера из базы в объект c данными всех юзеров, ключ = id из токена
         objectUser.usersData[idNewUser] = newUser[idNewUser];
-        //формируем объект публичных данных юзера, которые можно передавать всем юзерам по веб сокету (токены юзеров ни в коем слухаче не должны передаваться)
+        //формируем объект публичных данных юзера, которые можно передавать всем юзерам по веб сокету
         objectUser.usersList[idNewUser] = {
             id: newUser[idNewUser].id,
             name: newUser[idNewUser].name,
@@ -145,93 +130,84 @@ function onConnect(ws,req) { //ws - соединение, req параметры
         console.log('ошибка авторизации '+userToken);
         ws.close()
     }
-    console.log('успех');
-
 
                     
     //срабатывает когда веб сокет получает входящее сообщение
     ws.on('message', function (message) {
         try {
             let data = JSON.parse(message);
-            //console.log(data)
+            console.log(data)
             //валидация входящей даты
-            let validate = 1;
-            let ban = 0;
-            let error = 0;
-            /*
+            let close = false;
 
-                //валидация токена первична
-
-            */
-
-            if( error === 0){
-                //защита от спама данных на веб сокет (данные не чаще чем раз в 300 мс секунды)
-                if ( typeof (ws.limit_time) == 'undefined' || typeof (ws.limit_time) == null){
-                    ws.limit_time = Date.now();
-                }
-                else{
-                    let timeout = Date.now() - ws.limit_time;
-                    if ( timeout < 300 ){
-                        //лимит превышен, 2 проверка
-                        if ( typeof (ws.limit_time_2) == 'undefined' || typeof (ws.limit_time_2) == null){
-                            ws.limit_time_2 = Date.now();
-                        }
-                        else{
-                            let timeout_2 = Date.now() - ws.limit_time_2;
-                            if ( timeout_2 < 2000 ){
-                                validate = 0 ;
-                                ban = 1;
-                                console.log(data)
-                            }
-                            else{
-                                ws.limit_time_2 = Date.now();
-                            }
-                        }
+            //защита от спама данных на веб сокет (данные не чаще чем раз в 300 мс секунды)
+            if ( typeof (ws.limit_time) == 'undefined' || typeof (ws.limit_time) == null){
+                ws.limit_time = Date.now();
+            }
+            else{
+                let timeout = Date.now() - ws.limit_time;
+                if ( timeout < 300 ){
+                    //лимит превышен, 2 проверка
+                    if ( typeof (ws.limit_time_2) == 'undefined' || typeof (ws.limit_time_2) == null){
+                        ws.limit_time_2 = Date.now();
                     }
                     else{
-                        ws.limit_time = Date.now();
+                        let timeout_2 = Date.now() - ws.limit_time_2;
+                        if ( timeout_2 < 300 ){
+                            close = true;
+                        }
+                        else{
+                            ws.limit_time_2 = Date.now();
+                        }
                     }
+                }
+                else{
+                    ws.limit_time = Date.now();
                 }
             }
 
 
             //рвем связь с юзером приславшим не валидные данные и сделать бан
-            if ( ban === 1 ){
-                console.log('не валидные данные - терминате конект')
-                console.log(data)
-                //выдать бан
-
-                //закрываем конект у текущего юзера
-                //ws.close();
-                //warning('not_valid_data','', data, errorUser, ws._socket.remoteAddress);
-                ws.terminate();
+            if (close){
+                console.log('превышен лимит запросов');
+                ws.close();
+               // ws.terminate();
             }
 
+            //пинги не валидируем
+            if(data?.type==='ping'){return}
 
-            if ( validate === 1){
+            // Валидация
+            let { error, value } = chatPublicMessageSchema.validate(data);
+            if (error) {
+                console.log("Ошибка валидации:", error.details[0].message);
+                ws.close();
+            }
+            else {
 
-                //находим юзера приславшего сообщение в объекте всех юзеров по uuid
-                let user = objectUser.usersList[ws.user_uuid];
-                console.log('сообщение в чат');
+                if (objectUser.usersList[ws.user_uuid]) {
+                    //находим юзера приславшего сообщение в объекте всех юзеров по uuid
+                    let user = objectUser.usersList[ws.user_uuid];
+                    console.log('сообщение в чат');
 
-                let dataSend = {
-                    "name": user.name,
-                    "data": user,
-                    "type": 'publicMessage',
-                    "message": data.message,
-                }
-
-                if ( data.type === 'publicMessage') {
-
-                    //ответ с сервера всем подключенным юзерам
-                    wss.clients.forEach(function (client) {
-                        if (client.readyState === ws.OPEN) {
-                            client.send(JSON.stringify(dataSend));
+                    let dataSend = {
+                        "user_id": user.id,
+                        "data": data.data,
+                        "type": 'publicMessage',
+                        "user": {
+                            'avatar': '',
+                            "name": user.name,
+                            "level": 9,
                         }
-                    });
+                    }
 
+                    if (data.type === 'publicMessage') {
+                        dataAllSend(dataSend)
+                    }
                 }
-
+                else{
+                    console.log("не зарегистрированный коннект");
+                }
             }
         } catch (err) {
             console.error('Ошибка при парсинге данных:', err);
@@ -282,7 +258,7 @@ setInterval(() => {
     if (Object.keys(newUser).length > 0) {
         wss.clients.forEach(function (client) {
 
-            if (client.readyState === ws.OPEN) {
+            if (client.readyState === 1) {
                 console.log('первичное сообщение'+client.user_uuid)
                 //уведомление только новых юзеров - отдаем им стартовый объект со списком всех юзеров в чате.
                 if (client.user_uuid in newUser) {
@@ -313,7 +289,7 @@ setInterval(() => {
         //удаление из объекта новых юзеров
         wss.clients.forEach(function (client) {
             if (client.user_uuid in newUser) {
-                console.log('удаление нового юзера из обьекта ' + client.user_uuid)
+                console.log('удаление нового юзера из объекта ' + client.user_uuid)
                 delete newUser[client.user_uuid];
             }
         });
@@ -322,6 +298,7 @@ setInterval(() => {
 }, "2000");
 
 
+/*
 setInterval(() => {
     console.log('333');
     wss.clients.forEach((client) => {
@@ -331,6 +308,8 @@ setInterval(() => {
         }
     });
 },"5000");
+
+ */
 
 // Отправка всем подключенным к сокету юзерам
 function dataAllSend(dataRequest){
@@ -359,7 +338,7 @@ function httpRequest(req, res) {
 
     if (req.method === 'POST') {
         console.log('пост');
-        var jsonString = '';
+        let jsonString = '';
 
         req.on('data', function (data) {
             jsonString += data;
