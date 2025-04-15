@@ -1,0 +1,27 @@
+{
+  "compilerOptions": {
+    "strict": true,
+    "noImplicitAny": true,
+    "strictNullChecks": true,
+    "strictFunctionTypes": true,
+    "strictPropertyInitialization": true,
+    "noImplicitThis": true,
+    "alwaysStrict": true,
+    "baseUrl": "./",
+    "lib": ["ES2015", "DOM"],
+    "esModuleInterop": true,
+    "allowSyntheticDefaultImports": true,
+    "module": "es6",
+    "target": "es6",
+    "moduleResolution": "node",
+    "sourceMap": true,
+    "allowJs": true,
+    "outDir": "dist",
+    "sourceRoot": "src",
+    //"allowImportingTsExtensions": true
+    "skipLibCheck": true,
+    "types": ["node"]
+  },
+  "include": ["**/*.ts"],
+  "exclude": ["node_modules", "dist"]
+}
