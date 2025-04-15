@@ -1,5 +1,6 @@
 import axios from 'axios';
 import http from 'http';
+import { IncomingMessage, ServerResponse } from 'http';
 import WebSocket from 'ws';
 import { WebSocketServer } from 'ws';
 import Joi from 'joi';
@@ -61,7 +62,7 @@ const wss = new WebSocketServer({port: 9999, maxPayload: 1024 * 1024}); //лим
 wss.on('connection',onConnect);
 
 
-function base64UrlDecode(str) {
+function base64UrlDecode(str: string): string {
     // Восстанавливаем Base64 из URL-safe формата
     return Buffer.from(
         str.replace(/-/g, '+').replace(/_/g, '/'),
@@ -114,7 +115,7 @@ console.log(token);
 }
 
 
-function onConnect(ws,req): void { //ws - соединение, req параметры из url запроса
+function onConnect(ws: CustomWebSocket, req: http.IncomingMessage): void { //ws - соединение, req параметры из url запроса
     let url = new URLSearchParams(req.url);
     let userToken = url.get('token');
 
@@ -165,47 +166,29 @@ function onConnect(ws,req): void { //ws - соединение, req параме
           try {
               let data = JSON.parse(message.toString());
               console.log(data)
-              //валидация входящей даты
-              let close: boolean = false;
 
-              //защита от спама данных на веб сокет (данные не чаще чем раз в 300 мс секунды)
-              if ( typeof (ws.limit_time) == 'undefined' || typeof (ws.limit_time) == null){
-                  ws.limit_time = Date.now();
-              }
-              else{
-                  let timeout = Date.now() - ws.limit_time;
-                  if ( timeout < 300 ){
-                      //лимит превышен, 2 проверка
-                      if ( typeof (ws.limit_time_2) == 'undefined' || typeof (ws.limit_time_2) == null){
-                          ws.limit_time_2 = Date.now();
-                      }
-                      else{
-                          let timeout_2 = Date.now() - ws.limit_time_2;
-                          if ( timeout_2 < 300 ){
-                              close = true;
-                          }
-                          else{
-                              ws.limit_time_2 = Date.now();
-                          }
-                      }
-                  }
-                  else{
-                      ws.limit_time = Date.now();
-                  }
-              }
+              //антиспам — не более 5 сообщений в секунду
+              const now = Date.now();
+              ws.message_timestamps = ws.message_timestamps || [];
 
+              //убираем старые таймштампы (старше 1000 мс)
+              ws.message_timestamps = ws.message_timestamps.filter(ts => now - ts < 1000);
 
-              //рвем связь с юзером приславшим не валидные данные и сделать бан
-              if (close){
-                  console.log('превышен лимит запросов');
+              // добавляем текущий
+              ws.message_timestamps.push(now);
+
+              // Проверка лимита
+              if (ws.message_timestamps.length > 5) {
+                  console.log(`Флуд от ${ws.user_uuid}, соединение закрыто`);
                   ws.close();
-                  return
+                  return;
               }
+
 
               //пинги не валидируем
               if(data?.type==='ping'){return}
 
-              // Валидация
+              // валидация
               let { error, value: validData } = chatPublicMessageSchema.validate(data);
               if (error) {
                   console.log("Ошибка валидации:", error.details[0].message);
@@ -213,7 +196,7 @@ function onConnect(ws,req): void { //ws - соединение, req параме
               }
               else {
                   console.log('validData', validData);
-                  if (objectUser.usersList[ws.user_uuid]) {
+                  if (ws.user_uuid && objectUser.usersList[ws.user_uuid]) {
                       //находим юзера приславшего сообщение в объекте всех юзеров по uuid
                       let user = objectUser.usersList[ws.user_uuid];
                       console.log('сообщение в чат');
@@ -224,7 +207,7 @@ function onConnect(ws,req): void { //ws - соединение, req параме
                           type : 'publicMessage',
                       }
 
-                      if (data.type === 'publicMessage') {
+                      if (validData.type === 'publicMessage') {
                           dataAllSend(dataSend, true)
                       }
                   }
@@ -242,7 +225,7 @@ function onConnect(ws,req): void { //ws - соединение, req параме
 
     //срабатывает при отключении юзера от чата (его сокет обрывается)
     ws.on('close', function(): void {
-        if (typeof (objectUser.usersData[ws.user_uuid]) !== 'undefined') {
+        if (ws.user_uuid && typeof (objectUser.usersData[ws.user_uuid]) !== 'undefined') {
             if (objectUser.usersList[ws.user_uuid]?.u_uuid) {
                 let dataSend: DataSend  = {
                     type : 'logoutUser',
@@ -353,7 +336,6 @@ function getPublicDataUser(userId: string): UserPublicData | null {
     if (publicData) {
 
         return  {
-            "user_id": userId,
             'avatar': publicData['avatar'],
             "name": publicData['name'],
             "level": publicData['level'],
@@ -365,7 +347,7 @@ function getPublicDataUser(userId: string): UserPublicData | null {
 }
 
 //опциональное получение данных из внешних источников, в данном примере http, но по хорошему должен быть rebbit
-function httpRequest(req, res): void {
+function httpRequest(req: IncomingMessage, res: ServerResponse): void {
 
     if (req.method === 'POST') {
         console.log('пост');
