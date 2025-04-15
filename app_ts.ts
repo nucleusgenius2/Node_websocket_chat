@@ -14,7 +14,7 @@ import {
     chatSchema,
     chatPublicMessageSchema,
     tokenSchema
-} from './validation/chat';
+} from './validation/chat.js';
 
 const secret = process.env.WEBSOCKET_JWT_SECRET;
 const httpPort =  process.env.HTTP_PORT;
@@ -220,7 +220,7 @@ function onConnect(ws: CustomWebSocket, req: http.IncomingMessage): void { //ws 
             }
 
             //удаляем юзера из объекта юзеров
-            //console.log('вышел ' + ws.user_uuid)
+            console.log('вышел ' + ws.user_uuid)
             delete objectUser.usersData[ws.user_uuid];
 
             if (typeof (objectUser.usersList[ws.user_uuid]) !== 'undefined') {
