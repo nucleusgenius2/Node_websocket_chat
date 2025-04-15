@@ -1,9 +1,7 @@
 import axios from 'axios';
 import http from 'http';
 import { IncomingMessage, ServerResponse } from 'http';
-import WebSocket from 'ws';
 import { WebSocketServer } from 'ws';
-import Joi from 'joi';
 import crypto from 'crypto';
 import dotenv from 'dotenv';
 dotenv.config();
@@ -12,6 +10,11 @@ import {VerifyTokenResult, TokenPayload} from './types/auth';
 import {GlobalObjectUser, UserList} from './types/user';
 import {CustomWebSocket, DataSend, DataSendPersonal, UserPublicData, StartData } from './types/websoclet';
 
+import {
+    chatSchema,
+    chatPublicMessageSchema,
+    tokenSchema
+} from './validation/chat';
 
 const secret = process.env.WEBSOCKET_JWT_SECRET;
 const httpPort =  process.env.HTTP_PORT;
@@ -28,25 +31,6 @@ let objectUser: GlobalObjectUser = {
 };
 let newUser: Record<string, TokenPayload> = {};
 
-const chatSchema = Joi.object({
-    type: Joi.string().min(3).required(),
-    data: Joi.string().required(),
-    u_uuid: Joi.number().integer().min(1).required(),
-    user_id_original: Joi.number().integer().min(1).required(),
-    user: Joi.object({
-        name: Joi.string().required(),
-        avatar: Joi.string().allow(null),
-        level: Joi.number().integer().allow(null),
-    }).required()
-});
-
-const chatPublicMessageSchema = Joi.object({
-    type: Joi.string().min(3).required(),
-    data: Joi.string().required(),
-    user_id: Joi.number().integer().min(1),
-});
-
-const tokenSchema = Joi.string().min(10).required();
 
 /*
 const server = https.createServer({
@@ -58,7 +42,7 @@ const server = https.createServer({
 const wss = new ws.Server({ server});
  */
 
-const wss = new WebSocketServer({port: 9999, maxPayload: 1024 * 1024}); //лимит на передачу данных (162 килобайта проходят, а 512 уже нет)
+const wss = new WebSocketServer({port: wsPort, maxPayload: 1024 * 1024}); //лимит на передачу данных (162 килобайта проходят, а 512 уже нет)
 wss.on('connection',onConnect);
 
 
@@ -125,7 +109,7 @@ function onConnect(ws: CustomWebSocket, req: http.IncomingMessage): void { //ws 
         console.log("Ошибка валидации:", error.details[0].message);
         ws.close();
     }
-    console.log(token)
+
     let checkToken = verifyToken(token )
     if (checkToken.valid){
         let user: TokenPayload = checkToken.payload
@@ -137,7 +121,7 @@ function onConnect(ws: CustomWebSocket, req: http.IncomingMessage): void { //ws 
         }
 
         let idNewUser = user.u_uuid;
-        console.log('новый юзер' + idNewUser)
+        //console.log('новый юзер' + idNewUser)
         newUser[idNewUser] = user;
 
         //записали в объект соединения токен и имя юзера как идентификатор (будет доступен при переборе соединений)
@@ -236,7 +220,7 @@ function onConnect(ws: CustomWebSocket, req: http.IncomingMessage): void { //ws 
             }
 
             //удаляем юзера из объекта юзеров
-            console.log('вышел ' + ws.user_uuid)
+            //console.log('вышел ' + ws.user_uuid)
             delete objectUser.usersData[ws.user_uuid];
 
             if (typeof (objectUser.usersList[ws.user_uuid]) !== 'undefined') {
@@ -260,7 +244,7 @@ setInterval((): void => {
         wss.clients.forEach(function (client: CustomWebSocket): void {
 
             if (client.readyState === 1 && client.user_uuid) {
-                console.log('первичное сообщение'+client.user_uuid)
+                //console.log('первичное сообщение'+client.user_uuid)
                 //уведомление только новых юзеров - отдаем им стартовый объект со списком всех юзеров в чате.
                 if (client.user_uuid in newUser) {
                     let objectStarData: StartData  = {
@@ -290,7 +274,7 @@ setInterval((): void => {
         //удаление из объекта новых юзеров
         wss.clients.forEach(function (client: CustomWebSocket) {
             if (client.user_uuid && client.user_uuid in newUser) {
-                console.log('удаление нового юзера из объекта ' + client.user_uuid)
+                //console.log('удаление нового юзера из объекта ' + client.user_uuid)
                 delete newUser[client.user_uuid];
             }
         });
@@ -323,7 +307,7 @@ function dataPersonalSend(dataRequest: DataSendPersonal): void{
     wss.clients.forEach((client: CustomWebSocket): void => {
 
         if ((client.readyState === 1) && (client.user_uuid === dataRequest.u_uuid)) {
-            console.log('отправка персонально '+client.user_uuid);
+            //console.log('отправка персонально '+client.user_uuid);
 
             client.send(JSON.stringify(publicData));
         }
